@@ -1,6 +1,9 @@
 #!/bin/bash
 
-DB_FILE="base.sqlite"
+DB_FILE="base.csv"
+DB_ZIP_FILE="base.zip"
+
+unzip "$DB_ZIP_FILE"
 
 if [ -f pgloader.conf ]; then
     source <(grep '^[^#]*=' pgloader.conf)

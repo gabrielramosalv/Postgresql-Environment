@@ -33,3 +33,4 @@ airflow/dbt/dbt_internal_packages/*
 
 /.idea
 *.iml
+base.csv
