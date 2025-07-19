@@ -2,6 +2,7 @@
 
 DB_FILE="base.csv"
 DB_ZIP_FILE="base.zip"
+SQL_FILE="create_db.sql"
 
 unzip "$DB_ZIP_FILE"
 
@@ -16,6 +17,9 @@ function main() {
 
     envsubst < pgloader.conf > pg.load
 
+    docker cp "$SQL_FILE" test_pgloader_etl:/tmp/"$SQL_FILE"
+    docker exec test_pgloader_etl psql -U postgres -d postgres -f /tmp/"$SQL_FILE"
+
     docker pull dimitri/pgloader:ccl.latest
 
     docker run -it -d --rm --cpus 3 -m 3g --shm-size=1024m -w /data -h pgloader --name pgloader --network host dimitri/pgloader:ccl.latest
@@ -25,9 +29,11 @@ function main() {
 
     docker exec pgloader bash -c "pgloader /data/pg.load"
 
-    docker rm pgloader --force --volumes;
+    docker rm pgloader --force --volumes
 
-    docker image prune -f;
+    docker image prune -f
+
+    docker exec test_pgloader_etl psql -U postgres -d postgres -c "CALL instituicoes.inserir_relacoes_sede();"
 }
 
 main 2>&1 | tee -a logfile.log
