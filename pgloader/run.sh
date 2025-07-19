@@ -2,7 +2,6 @@
 
 DB_FILE="base.csv"
 DB_ZIP_FILE="base.zip"
-SQL_FILE="create_db.sql"
 
 unzip "$DB_ZIP_FILE"
 
@@ -16,9 +15,6 @@ fi
 function main() {
 
     envsubst < pgloader.conf > pg.load
-
-    docker cp "$SQL_FILE" test_pgloader_etl:/tmp/"$SQL_FILE"
-    docker exec test_pgloader_etl psql -U postgres -d postgres -f /tmp/"$SQL_FILE"
 
     docker pull dimitri/pgloader:ccl.latest
 
