@@ -3,7 +3,7 @@
 -- =============================
 
 CREATE SCHEMA IF NOT EXISTS instituicoes;
-SET search_path TO inst
+SET search_path TO instituicoes;
 
 DROP DATABASE IF EXISTS instituicoes;
 CREATE DATABASE instituicoes;
@@ -487,10 +487,10 @@ CREATE TABLE instituicoes.situacao (
     nome VARCHAR(50) NOT NULL UNIQUE
 );
 
-DROP TABLE IF EXISTS regulamentacao CASCADE;
-CREATE TABLE instituicoes.regulamentacao (
+DROP TABLE IF EXISTS regulamentacao_estado CASCADE;
+CREATE TABLE instituicoes.regulamentacao_estado (
     id BIGSERIAL PRIMARY KEY,
-    estado VARCHAR(20) NOT NULL UNIQUE
+    nome VARCHAR(20) NOT NULL UNIQUE
 );
 
 DROP TABLE IF EXISTS local_funcionamento CASCADE;
@@ -499,11 +499,10 @@ CREATE TABLE instituicoes.local_funcionamento (
     nome VARCHAR(50) NOT NULL UNIQUE
 );
 
-DROP TABLE IF EXISTS tipo_reserva_vagas CASCADE;
-CREATE TABLE instituicoes.tipo_reserva_vagas (
+DROP TABLE IF EXISTS reserva_vaga_tipo CASCADE;
+CREATE TABLE instituicoes.reserva_vaga_tipo (
     id BIGSERIAL PRIMARY KEY,
-    nome VARCHAR(50) NOT NULL UNIQUE,
-    descricao VARCHAR(2000)
+    nome VARCHAR(50) NOT NULL UNIQUE
 );
 
 DROP TABLE IF EXISTS modalidade CASCADE;
@@ -565,8 +564,8 @@ DROP TABLE IF EXISTS recurso CASCADE;
 CREATE TABLE instituicoes.recurso (
     id BIGSERIAL PRIMARY KEY,
     id_recurso_tipo BIGINT NOT NULL REFERENCES recurso_tipo(id),
-    nome VARCHAR(100) NOT NULL,
-    descricao VARCHAR(2000) UNIQUE
+    nome VARCHAR(100) NOT NULL UNIQUE,
+    descricao VARCHAR(2000)
 );
 
 -- =============================
@@ -667,7 +666,7 @@ CREATE TABLE instituicoes.instituicao (
     id BIGSERIAL PRIMARY KEY,
     id_endereco BIGINT NOT NULL REFERENCES endereco(id),
     id_situacao BIGINT NOT NULL REFERENCES situacao(id),
-    id_regulamentacao BIGINT REFERENCES regulamentacao(id),
+    id_regulamentacao_estado BIGINT REFERENCES regulamentacao_estado(id),
     ies_vinculado INT NOT NULL,
     codigo INT NOT NULL,
     codigo_sede INT NULL,
@@ -725,7 +724,7 @@ DROP TABLE IF EXISTS segmento_indicador_instituicao CASCADE;
 CREATE TABLE instituicoes.segmento_indicador_instituicao (
     id_segmento_instituicao BIGSERIAL NOT NULL,
     id_segmento_indicador_tipo BIGSERIAL NOT NULL,
-    valor INT NOT NULL
+    valor DECIMAL NOT NULL
 );
 
 DROP TABLE IF EXISTS relacao_instituicao CASCADE;
@@ -746,12 +745,6 @@ CREATE TABLE instituicoes.exame (
     id_instituicao BIGINT NOT NULL REFERENCES instituicao(id)
 );
 
-DROP TABLE IF EXISTS reserva_vaga_tipo CASCADE;
-CREATE TABLE instituicoes.reserva_vaga_tipo (
-    id BIGSERIAL PRIMARY KEY,
-    nome VARCHAR(50) NOT NULL UNIQUE
-);
-
 DROP TABLE IF EXISTS reserva_vaga_exame CASCADE;
 CREATE TABLE instituicoes.reserva_vaga_exame (
     id_exame BIGINT NOT NULL REFERENCES exame(id),
@@ -770,7 +763,7 @@ INSERT INTO instituicoes.situacao (id, nome) VALUES
 (4, 'Extinta em Anos Anteriores');
 
 -- Regulamentação
-INSERT INTO instituicoes.regulamentacao (id, estado) VALUES
+INSERT INTO instituicoes.regulamentacao_estado (id, nome) VALUES
 (1, 'Sim'),
 (2, 'Não'),
 (3, 'Em tramitação');
@@ -828,7 +821,11 @@ INSERT INTO instituicoes.segmento (id, nome) VALUES
 (4, 'Ensino Fundamental - Anos Finais (6° ano até o 9 ano°)'),
 (5, 'Ensino Fundamental - EJA'),
 (6, 'Ensino Médio'),
-(7, 'Ensino Médio - EJA');
+(7, 'Ensino Médio - EJA'),
+(8, 'Ensino Profissional'),
+(9, 'Ensino Profissional Técnico'),
+(10, 'Ensino Especial Inclusivo'),
+(11, 'Ensino Especial Exclusivo');
 
 -- Tipo de indicador de segmento
 INSERT INTO instituicoes.segmento_indicador_tipo (id, nome) VALUES
@@ -1100,7 +1097,7 @@ BEGIN
 
     -- Criação da instituição
     INSERT INTO instituicoes.instituicao (
-        id_endereco, id_situacao, id_regulamentacao, ies_vinculado, nome, date, telefone, cnpj, codigo_sede, codigo
+        id_endereco, id_situacao, id_regulamentacao_estado, ies_vinculado, nome, date, telefone, cnpj, codigo_sede, codigo
     )
     VALUES (
         v_id_endereco, v_id_situacao, v_id_regulamentacao,
