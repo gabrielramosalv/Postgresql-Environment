@@ -29,7 +29,7 @@ function main() {
 
     docker image prune -f
 
-    docker exec test_pgloader_etl psql -U postgres -d postgres -c "CALL instituicoes.inserir_relacoes_sede();"
+    docker exec maquina1 psql -U postgres -d maquina1 -c "CALL inserir_relacoes_sede();"
 }
 
 main 2>&1 | tee -a logfile.log
