@@ -712,7 +712,7 @@ CREATE TABLE segmento_instituicao (
 
 DROP TABLE IF EXISTS segmento_indicador_instituicao CASCADE;
 CREATE TABLE segmento_indicador_instituicao (
-    id_segmento_instituicao BIGSERIAL NOT NULL,
+    id_segmento_instituicao BIGINT NOT NULL REFERENCES segmento_instituicao(id),
     id_segmento_indicador_tipo BIGSERIAL NOT NULL,
     valor DECIMAL NOT NULL
 );
@@ -1452,13 +1452,13 @@ BEGIN
 	IF NEW.IN_AGUA_POTAVEL = 1 THEN
 		INSERT INTO recurso_instituicao (id_instituicao, id_recurso, qtd) VALUES (v_id_instituicao, 10, 1);
 	END IF;
-	IF NEW.IN_ENERGIA_REDE_PUBLICA = 1 THEN
+	IF NEW.IN_ENERGIA_INEXISTENTE = 0 THEN
 		INSERT INTO recurso_instituicao (id_instituicao, id_recurso, qtd) VALUES (v_id_instituicao, 11, 1);
 	END IF;
-	IF NEW.IN_LIXO_SERVICO_COLETA = 1 THEN
+	IF NEW.IN_TRATAMENTO_LIXO_INEXISTENTE = 0 THEN
 		INSERT INTO recurso_instituicao (id_instituicao, id_recurso, qtd) VALUES (v_id_instituicao, 12, 1);
 	END IF;
-	IF NEW.IN_ESGOTO_REDE_PUBLICA = 1 THEN
+	IF NEW.IN_ESGOTO_INEXISTENTE = 0 THEN
 		INSERT INTO recurso_instituicao (id_instituicao, id_recurso, qtd) VALUES (v_id_instituicao, 13, 1);
 	END IF;
 	IF NEW.IN_INTERNET_ALUNOS = 1 THEN
