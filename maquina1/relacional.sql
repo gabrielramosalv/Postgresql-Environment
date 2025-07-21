@@ -1700,3 +1700,377 @@ BEGIN
 END;
 $$;
 
+-- =============================
+-- 10. Views estatísticas
+-- =============================
+
+-- Mostra as instituições que tem infraestrutura básica não atendidas (Alimentação, Água, Energia e Internet)
+CREATE OR REPLACE VIEW view_instituicoes_com_infraestrutura_incompleta AS
+SELECT
+    i.id AS id_instituicao,
+    i.nome AS nome_instituicao,
+    e.id AS id_estado,
+    e.nome AS estado,
+    (r1.id_recurso IS NULL) AS falta_alimentacao,
+    (r2.id_recurso IS NULL) AS falta_agua,
+    (r3.id_recurso IS NULL) AS falta_energia,
+    (r4.id_recurso IS NULL) AS falta_internet_alunos
+FROM estado e
+JOIN municipio m ON m.id_estado = e.id
+JOIN bairro b ON b.id_municipio = m.id
+JOIN endereco en ON en.id_bairro = b.id
+JOIN instituicao i ON i.id_endereco = en.id
+LEFT JOIN recurso_instituicao r1 ON r1.id_instituicao = i.id AND r1.id_recurso = 9
+LEFT JOIN recurso_instituicao r2 ON r2.id_instituicao = i.id AND r2.id_recurso = 10
+LEFT JOIN recurso_instituicao r3 ON r3.id_instituicao = i.id AND r3.id_recurso = 11
+LEFT JOIN recurso_instituicao r4 ON r4.id_instituicao = i.id AND r4.id_recurso = 14
+WHERE r1.id_recurso IS NULL OR r2.id_recurso IS NULL OR r3.id_recurso IS NULL OR r4.id_recurso IS NULL;
+
+
+-- Resumo completo de determinadas métricas para todos os estados.
+CREATE OR REPLACE VIEW view_resumo_estado_completo AS
+WITH infra AS (
+    SELECT
+        e.id AS id_estado,
+        COUNT(CASE WHEN r1.id_recurso IS NULL OR r2.id_recurso IS NULL OR r3.id_recurso IS NULL OR r4.id_recurso IS NULL THEN 1 END) AS qt_infra_incompleta,
+        COUNT(CASE WHEN r1.id_recurso IS NOT NULL AND r2.id_recurso IS NOT NULL AND r3.id_recurso IS NOT NULL AND r4.id_recurso IS NOT NULL THEN 1 END) AS qt_infra_completa
+    FROM estado e
+    JOIN municipio m ON m.id_estado = e.id
+    JOIN bairro b ON b.id_municipio = m.id
+    JOIN endereco en ON en.id_bairro = b.id
+    JOIN instituicao i ON i.id_endereco = en.id
+    LEFT JOIN recurso_instituicao r1 ON r1.id_instituicao = i.id AND r1.id_recurso = 9
+    LEFT JOIN recurso_instituicao r2 ON r2.id_instituicao = i.id AND r2.id_recurso = 10
+    LEFT JOIN recurso_instituicao r3 ON r3.id_instituicao = i.id AND r3.id_recurso = 11
+    LEFT JOIN recurso_instituicao r4 ON r4.id_instituicao = i.id AND r4.id_recurso = 14
+    GROUP BY e.id
+)
+SELECT
+    e.id AS id_estado,
+    e.nome AS estado,
+    m.sigla AS sigla_estado,
+    COUNT(DISTINCT i.id) AS qt_instituicoes,
+    SUM(COALESCE(sii_matricula.valor, 0)) AS qt_matriculas,
+    SUM(COALESCE(sii_docente.valor, 0)) AS qt_docentes,
+    SUM(COALESCE(sii_turma.valor, 0)) AS qt_turmas,
+    COALESCE(infra.qt_infra_incompleta, 0) AS qt_infra_incompleta,
+    COALESCE(infra.qt_infra_completa, 0) AS qt_infra_completa
+FROM estado e
+JOIN municipio m ON m.id_estado = e.id
+JOIN bairro b ON b.id_municipio = m.id
+JOIN endereco en ON en.id_bairro = b.id
+JOIN instituicao i ON i.id_endereco = en.id
+LEFT JOIN segmento_instituicao si ON si.id_instituicao = i.id
+LEFT JOIN segmento_indicador_instituicao sii_matricula ON sii_matricula.id_segmento_instituicao = si.id AND sii_matricula.id_segmento_indicador_tipo = 1
+LEFT JOIN segmento_indicador_instituicao sii_docente ON sii_docente.id_segmento_instituicao = si.id AND sii_docente.id_segmento_indicador_tipo = 2
+LEFT JOIN segmento_indicador_instituicao sii_turma ON sii_turma.id_segmento_instituicao = si.id AND sii_turma.id_segmento_indicador_tipo = 3
+LEFT JOIN infra ON infra.id_estado = e.id
+GROUP BY e.id, e.nome, m.sigla, infra.qt_infra_incompleta, infra.qt_infra_completa
+ORDER BY e.nome;
+
+
+-- Ranking com os estados com a melhor relação entre número de docentes e número de matrículas, ou seja, possível potencial de qualidade no atendimento educacional.
+CREATE OR REPLACE VIEW view_ranking_estadual_por_docente AS
+SELECT
+    e.nome AS estado,
+    m.sigla AS sigla,
+    SUM(COALESCE(sii_matricula.valor, 0)) AS qt_matriculas,
+    SUM(COALESCE(sii_docente.valor, 0)) AS qt_docentes,
+    ROUND(
+        CASE
+            WHEN SUM(COALESCE(sii_matricula.valor, 0)) = 0 THEN 0
+            ELSE (SUM(COALESCE(sii_docente.valor, 0)) * 100.0) / SUM(COALESCE(sii_matricula.valor, 0))
+        END, 2
+    ) AS rel_docente_por_100_alunos
+FROM estado e
+JOIN municipio m ON m.id_estado = e.id
+JOIN bairro b ON b.id_municipio = m.id
+JOIN endereco en ON en.id_bairro = b.id
+JOIN instituicao i ON i.id_endereco = en.id
+LEFT JOIN segmento_instituicao si ON si.id_instituicao = i.id
+LEFT JOIN segmento_indicador_instituicao sii_matricula ON sii_matricula.id_segmento_instituicao = si.id AND sii_matricula.id_segmento_indicador_tipo = 1
+LEFT JOIN segmento_indicador_instituicao sii_docente ON sii_docente.id_segmento_instituicao = si.id AND sii_docente.id_segmento_indicador_tipo = 2
+GROUP BY e.nome, m.sigla
+ORDER BY rel_docente_por_100_alunos DESC;
+
+
+-- =============================
+-- 10. Funções estatísticas
+-- =============================
+
+-- Calcula o índice composto de potencial educacional do estado com base na relação de docentes por 100 alunos, % de instituições com infraestrutura completa e média de etapas de ensino por instituição.
+CREATE OR REPLACE FUNCTION f_calcular_potencial_educacional_estado(p_id_estado INTEGER)
+RETURNS TABLE (
+    estado TEXT,
+    rel_docente_por_100_alunos NUMERIC,
+    perc_infra_completa NUMERIC,
+    media_etapas_por_instituicao NUMERIC,
+    indice_potencial NUMERIC
+)
+AS $$
+BEGIN
+    RETURN QUERY
+    WITH instituicoes_estado AS (
+        SELECT
+            i.id AS id_instituicao,
+            e.nome::TEXT AS estado,
+            CASE
+                WHEN EXISTS (SELECT 1 FROM recurso_instituicao r WHERE r.id_instituicao = i.id AND r.id_recurso = 9)
+                 AND EXISTS (SELECT 1 FROM recurso_instituicao r WHERE r.id_instituicao = i.id AND r.id_recurso = 10)
+                 AND EXISTS (SELECT 1 FROM recurso_instituicao r WHERE r.id_instituicao = i.id AND r.id_recurso = 11)
+                 AND EXISTS (SELECT 1 FROM recurso_instituicao r WHERE r.id_instituicao = i.id AND r.id_recurso = 14)
+                THEN TRUE
+                ELSE FALSE
+            END AS tem_infraestrutura_completa
+        FROM estado e
+        JOIN municipio m ON m.id_estado = e.id
+        JOIN bairro b ON b.id_municipio = m.id
+        JOIN endereco en ON en.id_bairro = b.id
+        JOIN instituicao i ON i.id_endereco = en.id
+        WHERE e.id = p_id_estado
+    ),
+    etapas AS (
+        SELECT
+            id_instituicao,
+            COUNT(DISTINCT id_segmento) AS qtd_etapas
+        FROM segmento_instituicao
+        GROUP BY id_instituicao
+    ),
+    indicadores AS (
+        SELECT
+            si.id_instituicao,
+            SUM(CASE WHEN sii.id_segmento_indicador_tipo = 1 THEN sii.valor ELSE 0 END) AS qt_matriculas,
+            SUM(CASE WHEN sii.id_segmento_indicador_tipo = 2 THEN sii.valor ELSE 0 END) AS qt_docentes
+        FROM segmento_instituicao si
+        LEFT JOIN segmento_indicador_instituicao sii ON sii.id_segmento_instituicao = si.id
+        GROUP BY si.id_instituicao
+    )
+    SELECT
+        ie.estado,
+        ROUND(SUM(i.qt_docentes) * 100.0 / NULLIF(SUM(i.qt_matriculas), 0), 2) AS rel_docente_por_100_alunos,
+        ROUND(SUM(CASE WHEN ie.tem_infraestrutura_completa THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2) AS perc_infra_completa,
+        ROUND(AVG(COALESCE(e.qtd_etapas, 0))::numeric, 2) AS media_etapas_por_instituicao,
+        ROUND((
+            (SUM(i.qt_docentes) * 100.0 / NULLIF(SUM(i.qt_matriculas), 0)) +
+            (SUM(CASE WHEN ie.tem_infraestrutura_completa THEN 1 ELSE 0 END) * 100.0 / COUNT(*)) +
+            (AVG(COALESCE(e.qtd_etapas, 0)) * 10)
+        ) / 3, 2) AS indice_potencial
+    FROM instituicoes_estado ie
+    LEFT JOIN indicadores i ON i.id_instituicao = ie.id_instituicao
+    LEFT JOIN etapas e ON e.id_instituicao = ie.id_instituicao
+    GROUP BY ie.estado;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Indica as carências estruturais (em percentual) das instituições de ensino de um estado específico.
+CREATE OR REPLACE FUNCTION f_necessidade_reforco_recursos(p_id_estado INTEGER)
+RETURNS TABLE (
+    nome_recurso TEXT,
+    percentual_faltando NUMERIC
+)
+AS $$
+BEGIN
+    RETURN QUERY
+    WITH instituicoes_estado AS (
+        SELECT i.id
+        FROM instituicao i
+        JOIN endereco en ON en.id = i.id_endereco
+        JOIN bairro b ON b.id = en.id_bairro
+        JOIN municipio m ON m.id = b.id_municipio
+        JOIN estado e ON e.id = m.id_estado
+        WHERE e.id = p_id_estado
+    ),
+    total AS (
+        SELECT COUNT(*) AS total_inst FROM instituicoes_estado
+    ),
+    faltantes_por_recurso AS (
+        SELECT
+            r.nome,
+            COUNT(*) AS qt_faltando
+        FROM recurso r
+        CROSS JOIN instituicoes_estado ie
+        LEFT JOIN recurso_instituicao ri
+            ON ri.id_instituicao = ie.id AND ri.id_recurso = r.id
+        WHERE ri.id_instituicao IS NULL
+        GROUP BY r.nome
+    )
+    SELECT
+        fpr.nome::TEXT AS nome_recurso,
+        ROUND(fpr.qt_faltando * 100.0 / NULLIF(t.total_inst, 0), 2) AS percentual_faltando
+    FROM faltantes_por_recurso fpr, total t
+    ORDER BY percentual_faltando DESC;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Indica a quantidade de instituições ativas, extintas e paralisadas em um determinado estado e qual a porcentagem que cada grupo representa o total.
+CREATE OR REPLACE FUNCTION f_resumo_situacao_funcionamento_estado(p_id_estado INTEGER)
+RETURNS TABLE (
+    situacao_funcionamento TEXT,
+    total_instituicoes BIGINT,
+    percentual_total NUMERIC
+)
+AS $$
+BEGIN
+    RETURN QUERY
+    WITH instituicoes_estado AS (
+        SELECT i.id_situacao
+        FROM instituicao i
+        JOIN endereco en ON en.id = i.id_endereco
+        JOIN bairro b ON b.id = en.id_bairro
+        JOIN municipio m ON m.id = b.id_municipio
+        WHERE m.id_estado = p_id_estado
+    ),
+    total_geral AS (
+        SELECT COUNT(*) AS total FROM instituicoes_estado
+    )
+    SELECT
+        s.nome::TEXT AS situacao_funcionamento,
+        COUNT(*)::BIGINT AS total_instituicoes,
+        ROUND(COUNT(*) * 100.0 / NULLIF(t.total, 0), 2) AS percentual_total
+    FROM instituicoes_estado ie
+    JOIN situacao s ON s.id = ie.id_situacao
+    CROSS JOIN total_geral t
+    GROUP BY s.nome, t.total
+    ORDER BY total_instituicoes DESC;
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- =============================
+-- 11. Triggers utilitárias
+-- =============================
+
+-- Valida o CNPJ na inserção da instituição.
+CREATE OR REPLACE FUNCTION f_validar_cnpj_instituicao()
+RETURNS TRIGGER AS $$
+DECLARE
+    cnpj_limpo TEXT;
+    soma INTEGER;
+    resto INTEGER;
+    i INTEGER;
+    pesos1 INTEGER[] := ARRAY[5,4,3,2,9,8,7,6,5,4,3,2];
+    pesos2 INTEGER[] := ARRAY[6,5,4,3,2,9,8,7,6,5,4,3,2];
+    digito1 INTEGER;
+    digito2 INTEGER;
+BEGIN
+    -- Permite CNPJ nulo
+    IF NEW.cnpj IS NULL THEN
+        RETURN NEW;
+    END IF;
+
+    -- Remove tudo que não for número
+    cnpj_limpo := REGEXP_REPLACE(NEW.cnpj, '\D', '', 'g');
+
+    IF LENGTH(cnpj_limpo) <> 14 THEN
+        RAISE EXCEPTION 'CNPJ inválido: deve conter 14 dígitos numéricos.';
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_validar_cnpj
+BEFORE INSERT OR UPDATE ON instituicao
+FOR EACH ROW
+EXECUTE FUNCTION f_validar_cnpj_instituicao();
+
+
+-- Caso o nome da instituição for vazio, será inserido um nome padrão.
+CREATE OR REPLACE FUNCTION f_nome_padrao_se_vazio()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.nome IS NULL OR TRIM(NEW.nome) = '' THEN
+        NEW.nome := 'Instituição ' || NEW.codigo;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_nome_padrao
+BEFORE INSERT OR UPDATE ON instituicao
+FOR EACH ROW
+EXECUTE FUNCTION f_nome_padrao_se_vazio();
+
+
+-- Valida e persiste o número do CEP.
+CREATE OR REPLACE FUNCTION f_validar_cep()
+RETURNS TRIGGER AS $$
+DECLARE
+    cep_limpo TEXT;
+BEGIN
+    cep_limpo := regexp_replace(NEW.cep, '\D', '', 'g');
+
+    IF LENGTH(cep_limpo) != 8 THEN
+        RAISE EXCEPTION 'CEP inválido. Deve conter exatamente 8 dígitos numéricos.';
+    END IF;
+
+    -- Reatribui o valor limpo ao campo (caso venha com hífen, etc)
+    NEW.cep := cep_limpo;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_validar_cep
+BEFORE INSERT OR UPDATE ON endereco
+FOR EACH ROW
+EXECUTE FUNCTION f_validar_cep();
+
+
+-- =============================
+-- 12. Procedures
+-- =============================
+
+-- Remove instituições extintas anteriores a uma determinada data.
+CREATE OR REPLACE PROCEDURE p_remover_instituicoes_extintas_ate(p_data_limite DATE)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    DELETE FROM instituicao
+    WHERE id_situacao = 4 AND date < p_data_limite;
+
+    RAISE NOTICE 'Instituições extintas antes de % foram removidas.', p_data_limite;
+END;
+$$;
+
+-- Atribui as instituições de uma sede para outra sede.
+CREATE OR REPLACE PROCEDURE p_reatribuir_sede(
+    p_id_sede_antiga BIGINT,
+    p_id_sede_nova BIGINT
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_afetadas INT;
+BEGIN
+    -- Atualiza todas as relações do tipo "sedia"
+    UPDATE relacao_instituicao
+    SET id_instituicao_origem = p_id_sede_nova
+    WHERE id_instituicao_origem = p_id_sede_antiga
+      AND id_tipo_relacao = 4;
+
+    GET DIAGNOSTICS v_afetadas = ROW_COUNT;
+
+    RAISE NOTICE 'Sede reatribuída de % para %. Total de instituições afetadas: %',
+        p_id_sede_antiga, p_id_sede_nova, v_afetadas;
+END;
+$$;
+
+-- Marcar como extintas instituições sem endereço.
+CREATE OR REPLACE PROCEDURE p_extinguir_instituicoes_sem_endereco()
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_afetadas INT;
+BEGIN
+    UPDATE instituicao
+    SET id_situacao = 4  -- Situação "extinta"
+    WHERE id_endereco NOT IN (
+        SELECT id FROM endereco
+    );
+
+    GET DIAGNOSTICS v_afetadas = ROW_COUNT;
+
+    RAISE NOTICE 'Total de instituições marcadas como extintas por falta de endereço: %', v_afetadas;
+END;
+$$;
